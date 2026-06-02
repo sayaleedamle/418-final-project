@@ -207,16 +207,24 @@ class TruthCheckAgent:
         client = genai.Client(api_key=config.gemini_api_key)
         return cls(client, config.model, config)
 
-    async def check(self, video: str, max_claims: int | None = None) -> FactCheckReport:
+    async def check(
+        self,
+        video: str,
+        max_claims: int | None = None,
+        transcript: str | None = None,
+    ) -> FactCheckReport:
         # Both semaphores must be created inside the running event loop
         self._sem      = asyncio.Semaphore(_MAX_CONCURRENT_CALLS)
         self._ncbi_sem = asyncio.Semaphore(_MAX_NCBI_CALLS)  # shared across ALL claims
         video_id = extract_video_id(video)
         video_url = f"https://www.youtube.com/watch?v={video_id}"
 
-        log.info("Fetching transcript for %s", video_id)
-        loop = asyncio.get_running_loop()
-        transcript = await loop.run_in_executor(None, fetch_transcript, video_id)
+        if transcript:
+            log.info("Using provided transcript (%d chars)", len(transcript))
+        else:
+            log.info("Fetching transcript for %s", video_id)
+            loop = asyncio.get_running_loop()
+            transcript = await loop.run_in_executor(None, fetch_transcript, video_id)
 
         log.info("Extracting claims (%d chars of transcript)", len(transcript))
         raw_claims = await self._extract_claims(transcript)

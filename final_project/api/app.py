@@ -187,6 +187,7 @@ def check():
     if not video:
         return jsonify({"error": "'video' must not be empty"}), 400
 
+    transcript = body.get("transcript") or None  # optional pre-fetched transcript
     max_claims = body.get("max_claims")
     if max_claims is not None:
         if not isinstance(max_claims, int) or max_claims < 1:
@@ -196,7 +197,7 @@ def check():
     t0 = time.monotonic()
 
     try:
-        report = asyncio.run(_agent.check(video, max_claims=max_claims))
+        report = asyncio.run(_agent.check(video, max_claims=max_claims, transcript=transcript))
     except TranscriptFetchError as exc:
         log.warning("Transcript fetch failed: %s", exc)
         return jsonify({"error": f"Could not fetch transcript: {exc}"}), 422

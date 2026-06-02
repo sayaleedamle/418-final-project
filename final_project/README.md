@@ -4,9 +4,9 @@
 
 TruthCheck extracts every checkable health claim from a YouTube transcript, retrieves real peer-reviewed evidence from PubMed, Cochrane Reviews, CDC, WHO, and NIH, and uses Gemini 2.5 Pro to classify each claim against scientific consensus — in under two minutes.
 
-**Live App:** _[Streamlit on Cloud Run — link after deployment]_  
-**API:** _[Flask on Cloud Run — link after deployment]_  
-**API Docs (Swagger):** _[/apidocs — link after deployment]_
+**Live App:** https://truthcheck-app-nidvsh553a-uc.a.run.app  
+**API:** https://truthcheck-api-nidvsh553a-uc.a.run.app  
+**API Docs (Swagger):** https://truthcheck-api-nidvsh553a-uc.a.run.app/apidocs
 
 ---
 
@@ -44,7 +44,7 @@ Health misinformation on YouTube is widespread and difficult to assess for viewe
 
 **Source:** YouTube transcripts via the `youtube-transcript-api` library (no scraping — uses YouTube's own caption system)
 
-**Corpus:** 6 health and nutrition videos from two channels:
+**Corpus:** 6 health and nutrition videos from two channels for experiment:
 
 | Channel | Videos |
 |---|---|
@@ -217,14 +217,17 @@ graph TD
     Orchestrator["🤖 TruthCheck Orchestrator\n(Python)"]
     Gemini["✨ Gemini 2.5 Pro\n(Google AI)"]
     YT["📹 YouTube\n(youtube-transcript-api)"]
+    Paste["📋 Manual Transcript\n(fault-tolerant fallback)"]
     PubMed["🔬 PubMed / NCBI\n(E-utilities)"]
     Cochrane["📚 Cochrane Reviews\n(via PubMed filter)"]
     HealthOrgs["🏥 CDC · WHO · NIH\n(via PubMed filter)"]
 
     User -->|"YouTube URL"| Streamlit
-    Streamlit -->|"POST /check"| API
+    User -->|"Pasted transcript\n(if auto-fetch blocked)"| Paste
+    Paste -->|"transcript text"| Streamlit
+    Streamlit -->|"POST /check\n+transcript if available"| API
     API --> Orchestrator
-    Orchestrator -->|"fetch transcript"| YT
+    Orchestrator -->|"auto-fetch\n(blocked on cloud)"| YT
     Orchestrator -->|"extract claims"| Gemini
     Orchestrator -->|"search evidence"| PubMed
     Orchestrator -->|"search evidence"| Cochrane
@@ -239,6 +242,7 @@ graph TD
 - Both services containerised with Docker and deployed to **Google Cloud Run** (serverless, scales to zero)
 - No persistent database — stateless per-request pipeline
 - `GEMINI_API_KEY` passed as a Cloud Run environment variable at deploy time
+- YouTube transcript auto-fetch blocked by YouTube on cloud IPs — handled gracefully via paste fallback
 
 ---
 
@@ -249,14 +253,29 @@ graph TD
 - Real-time spinner with progress messaging
 - 4-metric summary row: Supported · Contradicted · Contested · Unverifiable
 - Verdict distribution bar chart
-- Expandable claim cards with timestamp, verdict emoji, explanation, and citation links
+- Expandable claim cards with timestamp, verdict emoji, explanation, and citation links with PubMed search query shown
+- Paste transcript box for fault-tolerant operation (see note below)
 - Download as JSON or Markdown
 
 **Flask REST API (`api/app.py`)**
 - `GET  /health` — liveness check with model name and timestamp
-- `POST /check`  — full pipeline; body: `{"video": "<url>", "max_claims": N}`
+- `POST /check`  — full pipeline; accepts `{"video": "<url>"}` or `{"video": "<url>", "transcript": "<text>", "max_claims": N}`
 - `GET  /apidocs` — Swagger UI with full OpenAPI documentation
 - Rate limiting (5 req/min on `/check`), CORS enabled, structured error responses
+
+### ⚠️ Known Limitation — YouTube Transcript Fetching on Cloud
+
+YouTube actively blocks transcript requests originating from cloud provider IP ranges (Google Cloud Run, AWS, Azure, etc.). This is a platform-level restriction enforced by YouTube, not a bug in TruthCheck.
+
+**Fault-tolerant design:** TruthCheck handles this gracefully. The Streamlit app attempts to auto-fetch the transcript first. If YouTube blocks the request, the user can paste the transcript manually — the pipeline continues exactly as normal from that point.
+
+**How to get a transcript from YouTube:**
+1. Open the video on YouTube
+2. Click `···` (More actions) below the video → **Show transcript**
+3. Select all transcript text → Copy
+4. Paste into the **"Paste Transcript"** box in the TruthCheck app
+
+This approach is actually more robust than automatic fetching — it works for any video regardless of cloud restrictions, and puts the user in control of the input.
 
 ---
 
@@ -265,7 +284,7 @@ graph TD
 **Prerequisites:** Python 3.11+, a Gemini API key (free at [aistudio.google.com](https://aistudio.google.com))
 
 ```bash
-git clone <your-repo-url>
+git clone https://github.com/sayaleedamle/418-final-project.git
 cd final_project
 
 # Create and activate virtual environment
@@ -360,56 +379,63 @@ final_project/
 
 ---
 
-## AI Assistant Documentation
+## AI Assistant Integration
 
-**Tool used:** Claude (Anthropic) via Claude Code CLI throughout the entire project.
+I used **Claude Code** (Anthropic's CLI for Claude) as my primary AI assistant throughout this entire project. Every piece of code in this repository was written with Claude's help through an interactive session where I described what I wanted, reviewed the output, tested it, and iterated. This section documents exactly where Claude was used, what worked, and where I had to step in.
 
-### What AI was used for
+### What I used Claude for
 
-| Task | AI contribution |
-|---|---|
-| Project architecture | Designed the 5-stage pipeline, verdict taxonomy, and evidence retrieval strategy |
-| `config.py` | Generated frozen dataclass with built-in `.env` loader (no external dependency) |
-| `orchestrator.py` | Full async pipeline with `asyncio.Semaphore` concurrency, Pydantic models |
-| `sources/` module | All three evidence clients (PubMed, Cochrane, HealthOrgs) using NCBI E-utilities |
-| `tools/transcript.py` | YouTube transcript fetcher compatible with `youtube-transcript-api` v1.2.4 |
-| `tools/report.py` | Markdown report renderer with emoji verdict labels |
-| `api/app.py` | Flask API with Flasgger Swagger docs, rate limiting, CORS, error handling |
-| `streamlit_app/app.py` | Full Streamlit UI with metrics, bar chart, expandable cards, download buttons |
-| `deploy.sh` | Cloud Run deployment script with Artifact Registry |
-| `docker-compose.yml` | Local development setup with service health checks |
-| EDA notebook | Transcript analysis, LLM-readability scorecard, keyword density analysis |
-| Debugging | Fixed `YouTubeTranscriptApi` v1.x instance-based API breaking change |
-| Debugging | Fixed pandas MultiIndex bug from multi-column `groupby` |
+**Project design**
+I started by describing the project idea — a YouTube health claim fact-checker — and asked Claude to design the architecture. It proposed the 5-stage pipeline (transcript → claim extraction → evidence retrieval → evaluation → report), the verdict taxonomy, and the idea of using NCBI E-utilities with journal filters to get Cochrane and health org papers without needing separate API keys. I wouldn't have arrived at that evidence retrieval approach on my own.
 
-### Particularly helpful interactions
+**All core code files**
+Claude wrote the first working version of every file in this project:
+- `truthcheck/config.py` — frozen dataclass with a built-in `.env` loader
+- `truthcheck/agents/orchestrator.py` — the full async pipeline with Pydantic models and concurrency control
+- `truthcheck/sources/pubmed.py`, `cochrane.py`, `health_orgs.py` — all three PubMed evidence clients
+- `truthcheck/tools/transcript.py` — YouTube transcript fetcher with punctuation restoration from timing gaps
+- `api/app.py` — Flask REST API with Swagger docs, rate limiting, and CORS
+- `streamlit_app/app.py` — the full Streamlit UI including metrics, charts, claim cards, and download buttons
+- `deploy.sh` — the Cloud Run deployment script
+- `docker-compose.yml`, both `Dockerfile`s — containerisation setup
+- `eda.ipynb` — the data collection and EDA notebook
+- `evaluate.py` — the pipeline evaluation script
 
-- **Architecture decision:** Asked Claude to design the evidence retrieval layer — it suggested using NCBI E-utilities with journal/affiliation filters to get Cochrane and health org papers without extra API keys, which was a non-obvious but elegant solution.
-- **Async pattern:** The orchestrator's use of `asyncio.get_running_loop().run_in_executor()` to run synchronous HTTP calls inside async coroutines came directly from Claude's suggestion.
-- **Debugging v1.x API change:** `youtube-transcript-api` changed from class methods to instance methods in v1.x. Claude identified the root cause immediately from the error message and patched all affected call sites.
+**Debugging**
+When things broke, I pasted the error into Claude and it diagnosed the cause. The most useful debugging sessions were:
+- `youtube-transcript-api` v1.x silently changed from class methods to instance methods — Claude caught it immediately from the traceback
+- The `asyncio.Semaphore` being bound to the wrong event loop when Flask called `asyncio.run()` per request — Claude explained why and fixed it
+- PubMed returning empty results from concurrent async threads hitting NCBI's rate limit silently — Claude identified that the semaphore needed to be shared across all claims, not created per call
 
-### Where AI-generated code needed modification
+### Where I had to override or fix Claude's output
 
-- **Model swap:** Generated code defaulted to Claude/Anthropic SDK. Required manually switching to `google-genai` SDK for Gemini.
-- **Verdict calibration:** Early evaluation prompts produced too many `unverifiable` verdicts. Prompt tuning was done iteratively.
-- **EDA groupby bug:** AI-generated pandas code used multi-column `groupby` creating a MultiIndex. Required understanding the fix rather than just applying it.
+Claude defaulted to the Anthropic/Claude API for the LLM backend. I switched it to Gemini (`google-genai` SDK) since I already had a Gemini API key. This required changing several files and Claude adapted immediately when I told it to switch.
 
-### Lessons learned
+The EDA notebook had a pandas bug where `groupby` on multiple columns created a MultiIndex, breaking the summary table. Claude generated the fix but I had to understand what was happening before applying it — I didn't want to just blindly paste code I didn't understand.
 
-1. AI excels at boilerplate-heavy but structurally clear tasks (Flask routes, Dockerfiles, Pydantic models)
-2. Domain-specific decisions (which evidence sources, what verdicts mean) still required human judgment
-3. AI-generated code works best when you can verify it against documentation — especially for library version changes
-4. Iterating prompts with AI (for the LLM evaluation step) is faster than writing them from scratch
+Early evaluation prompts produced `unverifiable` for almost every claim. I iterated on the prompt wording with Claude over several rounds before the verdicts became meaningful.
+
+### Honest reflection on using AI for this project
+
+Claude handled every boilerplate-heavy task (Flask routes, Dockerfiles, Pydantic models, async patterns) faster and more correctly than I could have written from scratch. Where it fell short was in knowing things that changed after its training data cutoff — library version changes, YouTube's IP blocking behaviour, and NCBI rate limits in practice. Those required me to test, hit errors, and bring the real error messages back to Claude for diagnosis.
+
+The most valuable thing about using Claude Code specifically (vs. a chat interface) was being able to have it read the actual files, run test commands, and see real outputs — not just generate code into a void. That feedback loop made the debugging sessions much more productive.
 
 ---
 
 ## Challenges & Lessons Learned
 
-| Challenge | How it was resolved |
-|---|---|
-| `youtube-transcript-api` v1.x breaking change (class → instance API) | Updated all call sites; switched `seg["text"]` to `seg.text` |
-| Pandas MultiIndex from multi-column `groupby` in EDA | Changed to single-column `groupby("video_id")` |
-| Auto-generated captions lack punctuation | Flagged in EDA scorecard; noted as pre-processing step |
-| Long pipeline runtime for live demos | Use shortest video + `max_claims=3-5`; start analysis during a slide transition |
-| `google.generativeai` deprecated mid-project | Migrated to `google-genai` v2.x SDK |
-| Evidence retrieval returning tangentially related papers | Inherent limitation of keyword search; future work: query expansion |
+**YouTube blocks cloud provider IPs**
+
+This was the most frustrating challenge. YouTube actively blocks transcript requests from Google Cloud Run, AWS, and other major cloud providers. I discovered this only after deploying — the app worked perfectly locally but failed immediately on Cloud Run. I explored proxy services (Webshare free tier) but found the shared free IPs were also rate-limited by YouTube. The solution I landed on is a fault-tolerant design: the app attempts auto-fetch first, and if YouTube blocks it, the user can paste the transcript directly from YouTube's own UI (··· → Show transcript). This is actually a more transparent approach — the user sees exactly what content is being analyzed.
+
+**Verdict distribution skewed toward `unverifiable`**
+
+Early versions of the pipeline returned `unverifiable` for nearly every claim. The root cause was twofold: the PubMed search was using the full claim sentence as a query (too specific, returned zero or tangential results), and too many concurrent NCBI requests were silently failing due to rate limiting. I fixed this by using Gemini to extract concise medical keywords from each claim before querying PubMed, and by making evidence retrieval sequential rather than concurrent. Results improved significantly — claims like LDL particle count and statin effects now return `consensus_supported` with real PubMed citations. That said, the `unverifiable` rate remains higher than ideal for broad general claims where PubMed doesn't have a direct match. This is an honest limitation of keyword-based retrieval; semantic search or MeSH term mapping would improve it in future work.
+
+**Other issues encountered**
+
+- `youtube-transcript-api` v1.x silently changed from class methods to instance methods — caught this from a runtime error, fixed by updating all call sites and switching `seg["text"]` to `seg.text`
+- Pandas `groupby` on multiple columns creates a MultiIndex, which broke the EDA summary table — fixed by grouping on `video_id` only
+- Auto-generated captions have no punctuation, making claim boundaries ambiguous — addressed by inferring sentence boundaries from timing gaps between transcript segments
+- `google.generativeai` was deprecated mid-project — migrated to the new `google-genai` v2.x SDK

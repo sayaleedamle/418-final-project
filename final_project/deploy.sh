@@ -6,7 +6,7 @@
 # 1. Install gcloud CLI:  https://cloud.google.com/sdk/docs/install
 # 2. Authenticate:        gcloud auth login && gcloud auth configure-docker
 # 3. Install Docker (must be running)
-# 4. Set your API key:    export ANTHROPIC_API_KEY=sk-ant-...
+# 4. Set your API key:    export GEMINI_API_KEY=AIza...
 #
 # Usage
 # -----
@@ -28,6 +28,8 @@ APP_SERVICE="truthcheck-app"
 # ── Validate required env vars ────────────────────────────────────────────────
 
 : "${GEMINI_API_KEY:?GEMINI_API_KEY is not set. Run: export GEMINI_API_KEY=AIza...}"
+: "${WEBSHARE_USER:?WEBSHARE_USER is not set. Run: export WEBSHARE_USER=...}"
+: "${WEBSHARE_PASS:?WEBSHARE_PASS is not set. Run: export WEBSHARE_PASS=...}"
 
 # ── GCloud project ────────────────────────────────────────────────────────────
 
@@ -51,7 +53,7 @@ gcloud artifacts repositories create "$REPO" \
 
 REGISTRY="${REGION}-docker.pkg.dev/${PROJECT}/${REPO}"
 
-echo "▶ Configuring Docker auth for $REGISTRY…"
+echo "▶ Configuring Docker auth for ${REGISTRY}..."
 gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
 
 # ── Build & deploy API ────────────────────────────────────────────────────────
@@ -59,8 +61,8 @@ gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
 API_IMAGE="${REGISTRY}/${API_SERVICE}:latest"
 echo ""
 echo "── API ──────────────────────────────────────────────────────────────────"
-echo "▶ Building API image…"
-docker build -f api/Dockerfile -t "$API_IMAGE" .
+echo "▶ Building API image..."
+docker build --platform linux/amd64 -f api/Dockerfile -t "$API_IMAGE" .
 
 echo "▶ Pushing API image…"
 docker push "$API_IMAGE"
@@ -75,7 +77,7 @@ gcloud run deploy "$API_SERVICE" \
   --memory 1Gi \
   --cpu 2 \
   --timeout 300 \
-  --set-env-vars "GEMINI_API_KEY=${GEMINI_API_KEY}" \
+  --set-env-vars "GEMINI_API_KEY=${GEMINI_API_KEY},WEBSHARE_USER=${WEBSHARE_USER},WEBSHARE_PASS=${WEBSHARE_PASS}" \
   --quiet
 
 API_URL=$(gcloud run services describe "$API_SERVICE" \
@@ -88,8 +90,8 @@ echo "✔ API live at: $API_URL"
 APP_IMAGE="${REGISTRY}/${APP_SERVICE}:latest"
 echo ""
 echo "── Streamlit app ────────────────────────────────────────────────────────"
-echo "▶ Building Streamlit image…"
-docker build -f streamlit_app/Dockerfile -t "$APP_IMAGE" .
+echo "▶ Building Streamlit image..."
+docker build --platform linux/amd64 -f streamlit_app/Dockerfile -t "$APP_IMAGE" .
 
 echo "▶ Pushing Streamlit image…"
 docker push "$APP_IMAGE"

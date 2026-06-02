@@ -24,8 +24,6 @@ env/
 # macOS
 .DS_Store
 
-# Transcripts (large generated files)
-final_project/transcripts/
 
 # IDE
 .vscode/

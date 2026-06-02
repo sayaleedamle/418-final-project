@@ -120,6 +120,14 @@ with col_input:
 with col_btn:
     analyze = st.button("Analyze ▶", type="primary", use_container_width=True)
 
+with st.expander("📋 Paste transcript manually (use this if URL fetch fails)"):
+    pasted_transcript = st.text_area(
+        "Transcript text",
+        placeholder="Paste the video transcript here...",
+        height=150,
+        label_visibility="collapsed",
+    )
+
 if not analyze or not video_url.strip():
     st.info(
         "Enter a health or nutrition YouTube video URL and click **Analyze ▶**. "
@@ -127,15 +135,36 @@ if not analyze or not video_url.strip():
     )
     st.stop()
 
+# Try fetching transcript locally first (works locally, blocked on Cloud Run)
+transcript_to_send: str | None = pasted_transcript.strip() if pasted_transcript.strip() else None
+if not transcript_to_send:
+    try:
+        from youtube_transcript_api import YouTubeTranscriptApi, NoTranscriptFound, TranscriptsDisabled
+        import re as _re
+        _id_match = _re.search(r"(?:v=|youtu\.be/)([A-Za-z0-9_-]{11})", video_url)
+        if _id_match:
+            _api = YouTubeTranscriptApi()
+            _vid = _id_match.group(1)
+            try:
+                _t = _api.list(_vid).find_manually_created_transcript(["en"])
+            except Exception:
+                _t = _api.list(_vid).find_generated_transcript(["en"])
+            transcript_to_send = " ".join(s.text.strip() for s in _t.fetch() if s.text.strip())
+    except Exception:
+        pass  # Cloud Run blocks YouTube — API will try itself or fail gracefully
+
 
 # ── API call ──────────────────────────────────────────────────────────────────
 
 with st.spinner("Fetching transcript and evaluating claims — please wait…"):
     t0 = time.monotonic()
     try:
+        payload: dict = {"video": video_url.strip(), "max_claims": max_claims}
+        if transcript_to_send:
+            payload["transcript"] = transcript_to_send
         resp = requests.post(
             f"{api_url.rstrip('/')}/check",
-            json={"video": video_url.strip(), "max_claims": max_claims},
+            json=payload,
             timeout=360,
         )
     except requests.ConnectionError:
