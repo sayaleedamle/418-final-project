@@ -25,7 +25,7 @@ def _load_dotenv(env_path: Path) -> None:
 @dataclass(frozen=True)
 class Config:
     gemini_api_key: str
-    model: str = "gemini-1.5-pro"
+    model: str = "gemini-2.5-pro"
     log_level: str = "INFO"
 
     @classmethod
@@ -41,7 +41,7 @@ class Config:
 
         return cls(
             gemini_api_key=key,
-            model=os.getenv("TRUTHCHECK_MODEL", "gemini-1.5-pro"),
+            model=os.getenv("TRUTHCHECK_MODEL", "gemini-2.5-pro"),
             log_level=os.getenv("LOG_LEVEL", "INFO"),
         )
 
