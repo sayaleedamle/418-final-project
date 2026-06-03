@@ -389,7 +389,7 @@ I used **Claude Code** (Anthropic's CLI for Claude) as my primary AI assistant t
 I started by describing the project idea — a YouTube health claim fact-checker — and asked Claude to design the architecture. It proposed the 5-stage pipeline (transcript → claim extraction → evidence retrieval → evaluation → report), the verdict taxonomy, and the idea of using NCBI E-utilities with journal filters to get Cochrane and health org papers without needing separate API keys. I wouldn't have arrived at that evidence retrieval approach on my own.
 
 **All core code files**
-Claude wrote the first working version of every file in this project:
+
 - `truthcheck/config.py` — frozen dataclass with a built-in `.env` loader
 - `truthcheck/agents/orchestrator.py` — the full async pipeline with Pydantic models and concurrency control
 - `truthcheck/sources/pubmed.py`, `cochrane.py`, `health_orgs.py` — all three PubMed evidence clients
@@ -417,10 +417,13 @@ Early evaluation prompts produced `unverifiable` for almost every claim. I itera
 
 ### Honest reflection on using AI for this project
 
-Claude handled every boilerplate-heavy task (Flask routes, Dockerfiles, Pydantic models, async patterns) faster and more correctly than I could have written from scratch. Where it fell short was in knowing things that changed after its training data cutoff — library version changes, YouTube's IP blocking behaviour, and NCBI rate limits in practice. Those required me to test, hit errors, and bring the real error messages back to Claude for diagnosis.
+Claude handled every boilerplate-heavy task (Flask routes, Dockerfiles, Pydantic models, async patterns) faster and more correctly than I could have written from scratch. 
 
-The most valuable thing about using Claude Code specifically (vs. a chat interface) was being able to have it read the actual files, run test commands, and see real outputs — not just generate code into a void. That feedback loop made the debugging sessions much more productive.
+Where it fell short was in knowing things that changed after its training data cutoff — library version changes, YouTube's IP blocking behaviour, and NCBI rate limits in practice. Those required me to test, hit errors, and bring the real error messages back to Claude for diagnosis.
 
+AI helped me code and establish a layout for this project. I also took help for presentation beautification. The API integration and deployment was done manually but AI gave good insights for it. I mentioned what I wanted out of the project and how the output should be, and it delivered quite well.
+
+I had fun understanding how claude code worked on my system and got a reality check on how strong AI has become!
 ---
 
 ## Challenges & Lessons Learned
@@ -436,6 +439,7 @@ Early versions of the pipeline returned `unverifiable` for nearly every claim. T
 **Other issues encountered**
 
 - `youtube-transcript-api` v1.x silently changed from class methods to instance methods — caught this from a runtime error, fixed by updating all call sites and switching `seg["text"]` to `seg.text`
+- Couldn't use the `youtube-transcript-api` on cloud, which made me work on a fault tolderance method
 - Pandas `groupby` on multiple columns creates a MultiIndex, which broke the EDA summary table — fixed by grouping on `video_id` only
 - Auto-generated captions have no punctuation, making claim boundaries ambiguous — addressed by inferring sentence boundaries from timing gaps between transcript segments
 - `google.generativeai` was deprecated mid-project — migrated to the new `google-genai` v2.x SDK
