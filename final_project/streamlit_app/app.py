@@ -110,36 +110,40 @@ st.divider()
 
 # ── Input ─────────────────────────────────────────────────────────────────────
 
-col_input, col_btn = st.columns([5, 1])
-with col_input:
-    video_url = st.text_input(
-        "YouTube URL",
-        placeholder="https://www.youtube.com/watch?v=...",
-        label_visibility="collapsed",
-    )
-with col_btn:
-    analyze = st.button("Analyze ▶", type="primary", use_container_width=True)
+video_url = st.text_input(
+    "YouTube URL",
+    placeholder="https://www.youtube.com/watch?v=...",
+)
 
-with st.expander("📋 Paste transcript manually (use this if URL fetch fails)"):
-    pasted_transcript = st.text_area(
-        "Transcript text",
-        placeholder="Paste the video transcript here...",
-        height=150,
-        label_visibility="collapsed",
-    )
+st.markdown("**Transcript** *(optional)* — paste the transcript text directly, or leave empty and TruthCheck will fetch it from the URL automatically. "
+            "To get a transcript from YouTube: open the video → click `···` → **Show transcript** → select all → copy.")
+pasted_transcript = st.text_area(
+    "Transcript",
+    placeholder="Paste transcript here (optional)...",
+    height=150,
+    label_visibility="collapsed",
+    key="transcript_box",
+)
 
-if not analyze or not video_url.strip():
-    st.info(
-        "Enter a health or nutrition YouTube video URL and click **Analyze ▶**. "
-        "Processing takes 1–3 minutes depending on transcript length."
-    )
+analyze = st.button("Analyze ▶", type="primary")
+
+has_url        = bool(video_url.strip())
+has_transcript = bool(pasted_transcript.strip())
+
+if not analyze or (not has_url and not has_transcript):
+    st.info("Enter a YouTube URL, paste a transcript, or both — then click **Analyze ▶**.")
     st.stop()
 
-# Try fetching transcript locally first (works locally, blocked on Cloud Run)
-transcript_to_send: str | None = pasted_transcript.strip() if pasted_transcript.strip() else None
+if not has_url:
+    video_url = "https://www.youtube.com/watch?v=unknown"
+
+# If transcript pasted — use it directly, skip auto-fetch entirely
+transcript_to_send: str | None = pasted_transcript.strip() if has_transcript else None
+
+# Only try auto-fetch if nothing was pasted
 if not transcript_to_send:
     try:
-        from youtube_transcript_api import YouTubeTranscriptApi, NoTranscriptFound, TranscriptsDisabled
+        from youtube_transcript_api import YouTubeTranscriptApi
         import re as _re
         _id_match = _re.search(r"(?:v=|youtu\.be/)([A-Za-z0-9_-]{11})", video_url)
         if _id_match:
@@ -151,7 +155,7 @@ if not transcript_to_send:
                 _t = _api.list(_vid).find_generated_transcript(["en"])
             transcript_to_send = " ".join(s.text.strip() for s in _t.fetch() if s.text.strip())
     except Exception:
-        pass  # Cloud Run blocks YouTube — API will try itself or fail gracefully
+        pass  # Cloud Run IPs blocked by YouTube — API will handle or return clear error
 
 
 # ── API call ──────────────────────────────────────────────────────────────────

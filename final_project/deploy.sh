@@ -28,8 +28,6 @@ APP_SERVICE="truthcheck-app"
 # ── Validate required env vars ────────────────────────────────────────────────
 
 : "${GEMINI_API_KEY:?GEMINI_API_KEY is not set. Run: export GEMINI_API_KEY=AIza...}"
-: "${WEBSHARE_USER:?WEBSHARE_USER is not set. Run: export WEBSHARE_USER=...}"
-: "${WEBSHARE_PASS:?WEBSHARE_PASS is not set. Run: export WEBSHARE_PASS=...}"
 
 # ── GCloud project ────────────────────────────────────────────────────────────
 
@@ -77,7 +75,7 @@ gcloud run deploy "$API_SERVICE" \
   --memory 1Gi \
   --cpu 2 \
   --timeout 300 \
-  --set-env-vars "GEMINI_API_KEY=${GEMINI_API_KEY},WEBSHARE_USER=${WEBSHARE_USER},WEBSHARE_PASS=${WEBSHARE_PASS}" \
+  --set-env-vars "GEMINI_API_KEY=${GEMINI_API_KEY}" \
   --quiet
 
 API_URL=$(gcloud run services describe "$API_SERVICE" \

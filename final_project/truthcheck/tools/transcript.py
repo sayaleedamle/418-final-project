@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import re
 
 from youtube_transcript_api import (
@@ -10,25 +9,9 @@ from youtube_transcript_api import (
     NoTranscriptFound,
     TranscriptsDisabled,
 )
-from youtube_transcript_api.proxies import WebshareProxyConfig
 
 _YT_ID_RE = re.compile(r"(?:v=|youtu\.be/|embed/|shorts/)([A-Za-z0-9_-]{11})")
-
-
-def _build_api() -> YouTubeTranscriptApi:
-    user = os.getenv("WEBSHARE_USER")
-    passwd = os.getenv("WEBSHARE_PASS")
-    if user and passwd:
-        return YouTubeTranscriptApi(
-            proxy_config=WebshareProxyConfig(
-                proxy_username=user,
-                proxy_password=passwd,
-            )
-        )
-    return YouTubeTranscriptApi()
-
-
-_api = _build_api()
+_api = YouTubeTranscriptApi()
 
 
 class TranscriptFetchError(Exception):
