@@ -332,7 +332,7 @@ Both services are deployed to **Google Cloud Run** via [`deploy.sh`](deploy.sh):
 
 ```bash
 export GEMINI_API_KEY=AIza...
-./deploy.sh YOUR_GCP_PROJECT_ID
+./deploy.sh final-project-498218
 ```
 
 The script:
